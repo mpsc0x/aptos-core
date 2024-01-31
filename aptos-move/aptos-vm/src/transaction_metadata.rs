@@ -7,7 +7,9 @@ use aptos_gas_algebra::{FeePerGasUnit, Gas, NumBytes};
 use aptos_types::{
     account_address::AccountAddress,
     chain_id::ChainId,
-    transaction::{SignedTransaction, TransactionPayload},
+    transaction::{
+        user_transaction_context::UserTransactionContext, SignedTransaction, TransactionPayload,
+    },
 };
 
 pub struct TransactionMetadata {
@@ -118,5 +120,16 @@ impl TransactionMetadata {
 
     pub fn is_multi_agent(&self) -> bool {
         !self.secondary_signers.is_empty() || self.fee_payer.is_some()
+    }
+
+    pub fn as_user_transaction_context(&self) -> UserTransactionContext {
+        UserTransactionContext::new(
+            self.sender,
+            self.secondary_signers.clone(),
+            self.fee_payer.unwrap_or(self.sender),
+            self.max_gas_amount.into(),
+            self.gas_unit_price.into(),
+            self.chain_id.id(),
+        )
     }
 }
