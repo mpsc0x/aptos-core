@@ -7,9 +7,10 @@ use super::{
 };
 use crate::{
     block_storage::tracing::{observe_block, BlockStage},
-    consensusdb::{CertifiedNodeSchema, ConsensusDB, DagVoteSchema, NodeSchema},
-    counters,
-    counters::update_counters_for_committed_blocks,
+    consensusdb::{
+        CertifiedNodeSchema, ConsensusDB, DagVoteSchema, NodeSchema, RocksdbPropertyReporter,
+    },
+    counters::{self, update_counters_for_committed_blocks},
     dag::{
         storage::{CommitEvent, DAGStorage},
         CertifiedNode, Node, NodeId, Vote,
@@ -240,6 +241,7 @@ pub struct StorageAdapter {
     epoch_to_validators: HashMap<u64, Vec<Author>>,
     consensus_db: Arc<ConsensusDB>,
     aptos_db: Arc<dyn DbReader>,
+    _reporter: RocksdbPropertyReporter,
 }
 
 impl StorageAdapter {
@@ -250,6 +252,7 @@ impl StorageAdapter {
         aptos_db: Arc<dyn DbReader>,
     ) -> Self {
         Self {
+            _reporter: RocksdbPropertyReporter::new(consensus_db.clone()),
             epoch,
             epoch_to_validators,
             consensus_db,
