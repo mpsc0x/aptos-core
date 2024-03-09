@@ -18,7 +18,10 @@ where
     fn insert(&mut self, key: K, value: V) -> (u64, u64);
 }
 
-pub trait Ordered<K>: Send + Sync {
+pub trait Ordered<K>: Send + Sync
+where
+    K: PartialOrd + Clone + Send + Sync,
+{
     /// Returns the first key in the cache. Returns [`None`] if the cache is empty.
     fn first_key(&self) -> Option<K>;
 

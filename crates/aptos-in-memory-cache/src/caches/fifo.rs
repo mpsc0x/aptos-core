@@ -16,7 +16,7 @@ struct CacheMetadata<K> {
 /// FIFO is a simple in-memory cache with a deterministic FIFO eviction policy.
 pub struct FIFOCache<K, V>
 where
-    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone,
+    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone + PartialOrd,
     V: Weighted + Send + Sync + Clone,
 {
     /// Cache maps the cache key to the deserialized Transaction.
@@ -26,7 +26,7 @@ where
 
 impl<K, V> FIFOCache<K, V>
 where
-    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone,
+    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone + PartialOrd,
     V: Weighted + Send + Sync + Clone,
 {
     pub fn new(max_size_in_bytes: u64) -> Self {
@@ -78,7 +78,7 @@ where
 
 impl<K, V> Cache<K, V> for FIFOCache<K, V>
 where
-    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone,
+    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone + PartialOrd,
     V: Weighted + Send + Sync + Clone,
 {
     fn get(&self, key: &K) -> Option<V> {
@@ -101,7 +101,7 @@ where
 
 impl<K, V> Ordered<K> for FIFOCache<K, V>
 where
-    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone,
+    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone + PartialOrd,
     V: Weighted + Send + Sync + Clone,
 {
     fn first_key(&self) -> Option<K> {
