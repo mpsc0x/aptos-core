@@ -31,12 +31,11 @@ pub trait Weighted: Send + Sync {
     fn weight(&self) -> u64;
 }
 
-pub trait Incrementable<C, K, V>: Send + Sync
+pub trait Incrementable<K, V>: Send + Sync
 where
     K: Eq + Hash + Clone + Send + Sync,
     V: Clone + Send + Sync,
-    C: Cache<K, V>,
 {
     /// Returns the next key.
-    fn next(&self, cache: &C) -> Self;
+    fn next(&self, cache: &dyn Cache<K, V>) -> Self;
 }

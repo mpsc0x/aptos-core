@@ -1892,8 +1892,6 @@ version = "0.1.0"
 dependencies = [
  "dashmap",
  "quick_cache",
- "tokio",
- "tokio-util 0.7.10",
 ]
 
 [[package]]
