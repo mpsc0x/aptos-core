@@ -26,12 +26,17 @@ pub trait Ordered<K, V>: Send + Sync {
     fn last_key(&self) -> Option<K>;
 }
 
-pub trait Weighted {
+pub trait Weighted: Send + Sync {
     /// Returns the size of the value in bytes.
     fn weight(&self) -> u64;
 }
 
-pub trait Incrementable {
-    /// Increments the value.
-    fn next(&self) -> Self;
+pub trait Incrementable<C, K, V>: Send + Sync
+where
+    K: Eq + Hash + Clone + Send + Sync,
+    V: Clone + Send + Sync,
+    C: Cache<K, V>,
+{
+    /// Returns the next key.
+    fn next(&self, cache: &C) -> Self;
 }

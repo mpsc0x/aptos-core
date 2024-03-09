@@ -6,10 +6,7 @@ use dashmap::DashMap;
 use std::hash::Hash;
 
 #[derive(Debug, Clone, Copy)]
-struct CacheMetadata<K>
-where
-    K: Hash + Eq + PartialEq + Incrementable + Send + Sync + Clone,
-{
+struct CacheMetadata<K> {
     max_size_in_bytes: u64,
     total_size_in_bytes: u64,
     last_key: Option<K>,
@@ -19,7 +16,7 @@ where
 /// FIFO is a simple in-memory cache with a deterministic FIFO eviction policy.
 pub struct FIFOCache<K, V>
 where
-    K: Hash + Eq + PartialEq + Incrementable + Send + Sync + Clone,
+    K: Hash + Eq + PartialEq + Incrementable<Self, K, V> + Send + Sync + Clone,
     V: Weighted + Send + Sync + Clone,
 {
     /// Cache maps the cache key to the deserialized Transaction.
@@ -29,7 +26,7 @@ where
 
 impl<K, V> FIFOCache<K, V>
 where
-    K: Hash + Eq + PartialEq + Incrementable + Send + Sync + Clone,
+    K: Hash + Eq + PartialEq + Incrementable<Self, K, V> + Send + Sync + Clone,
     V: Weighted + Send + Sync + Clone,
 {
     pub fn new(max_size_in_bytes: u64) -> Self {
@@ -46,7 +43,7 @@ where
 
     fn pop(&mut self) -> Option<u64> {
         if let Some(first_key) = self.cache_metadata.first_key.clone() {
-            let next_key = first_key.next();
+            let next_key = first_key.next(&self);
             return self.items.remove(&first_key).map(|(_, v)| {
                 let weight = v.weight();
                 self.cache_metadata.first_key = Some(next_key);
@@ -80,7 +77,7 @@ where
 
 impl<K, V> Cache<K, V> for FIFOCache<K, V>
 where
-    K: Hash + Eq + PartialEq + Incrementable + Send + Sync + Clone,
+    K: Hash + Eq + PartialEq + Incrementable<Self, K, V> + Send + Sync + Clone,
     V: Weighted + Send + Sync + Clone,
 {
     fn get(&self, key: &K) -> Option<V> {
@@ -103,7 +100,7 @@ where
 
 impl<K, V> Ordered<K, V> for FIFOCache<K, V>
 where
-    K: Hash + Eq + PartialEq + Incrementable + Send + Sync + Clone,
+    K: Hash + Eq + PartialEq + Incrementable<Self, K, V> + Send + Sync + Clone,
     V: Weighted + Send + Sync + Clone,
 {
     fn first_key(&self) -> Option<K> {
