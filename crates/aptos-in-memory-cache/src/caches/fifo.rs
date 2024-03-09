@@ -99,7 +99,7 @@ where
     }
 }
 
-impl<K, V> Ordered<K, V> for FIFOCache<K, V>
+impl<K, V> Ordered<K> for FIFOCache<K, V>
 where
     K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone,
     V: Weighted + Send + Sync + Clone,

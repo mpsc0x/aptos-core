@@ -23,7 +23,7 @@ where
     }
 }
 
-impl<K, V, We, B, L> Ordered<K, V> for S3FIFOCache<K, V, We, B, L>
+impl<K, V, We, B, L> Ordered<K> for S3FIFOCache<K, V, We, B, L>
 where
     K: Eq + Hash + Clone + Send + Sync,
     V: Clone + Send + Sync,
