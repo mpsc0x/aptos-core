@@ -37,5 +37,5 @@ where
     V: Clone + Send + Sync,
 {
     /// Returns the next key.
-    fn next(&self, cache: &dyn Cache<K, V>) -> Self;
+    fn next(&self, pair: (&K, &V)) -> Self;
 }

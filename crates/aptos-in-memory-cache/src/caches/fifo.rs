@@ -43,7 +43,8 @@ where
 
     fn pop(&mut self) -> Option<u64> {
         if let Some(first_key) = self.cache_metadata.first_key.clone() {
-            let next_key = first_key.next(self);
+            let value = self.items.get(&first_key).unwrap(); // cleanup
+            let next_key = first_key.next((&first_key, value.value()));
             return self.items.remove(&first_key).map(|(_, v)| {
                 let weight = v.weight();
                 self.cache_metadata.first_key = Some(next_key);
