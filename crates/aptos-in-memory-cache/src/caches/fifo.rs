@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{Cache, Incrementable, Ordered, Weighted};
+use crate::{Cache, Incrementable, Ordered};
 use dashmap::DashMap;
 use std::hash::Hash;
 
@@ -16,8 +16,8 @@ struct CacheMetadata<K> {
 /// FIFO is a simple in-memory cache with a deterministic FIFO eviction policy.
 pub struct FIFOCache<K, V>
 where
-    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone + PartialOrd,
-    V: Weighted + Send + Sync + Clone,
+    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone,
+    V: Send + Sync + Clone,
 {
     /// Cache maps the cache key to the deserialized Transaction.
     items: DashMap<K, V>,
@@ -26,8 +26,8 @@ where
 
 impl<K, V> FIFOCache<K, V>
 where
-    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone + PartialOrd,
-    V: Weighted + Send + Sync + Clone,
+    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone,
+    V: Send + Sync + Clone,
 {
     pub fn new(max_size_in_bytes: u64) -> Self {
         FIFOCache {
@@ -46,7 +46,7 @@ where
             let value = self.items.get(&first_key).unwrap(); // cleanup
             let next_key = first_key.next(value.value());
             return self.items.remove(&first_key).map(|(_, v)| {
-                let weight = v.weight();
+                let weight = std::mem::size_of_val(&v) as u64;
                 self.cache_metadata.first_key = Some(next_key);
                 self.cache_metadata.total_size_in_bytes -= weight;
                 weight
@@ -71,15 +71,15 @@ where
 
     fn insert_impl(&mut self, key: K, value: V) {
         self.cache_metadata.last_key = Some(key.clone());
-        self.cache_metadata.total_size_in_bytes += value.weight();
+        self.cache_metadata.total_size_in_bytes += std::mem::size_of_val(&value) as u64;
         self.items.insert(key, value);
     }
 }
 
 impl<K, V> Cache<K, V> for FIFOCache<K, V>
 where
-    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone + PartialOrd,
-    V: Weighted + Send + Sync + Clone,
+    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone,
+    V: Send + Sync + Clone,
 {
     fn get(&self, key: &K) -> Option<V> {
         self.items.get(key).map(|v| v.value().clone())
@@ -92,7 +92,8 @@ where
         }
 
         // Evict until enough space is available for next value.
-        let (garbage_collection_count, garbage_collection_size) = self.evict(value.weight());
+        let (garbage_collection_count, garbage_collection_size) =
+            self.evict(std::mem::size_of_val(&value) as u64);
         self.insert_impl(key, value);
 
         return (garbage_collection_count, garbage_collection_size);
@@ -101,8 +102,8 @@ where
 
 impl<K, V> Ordered<K> for FIFOCache<K, V>
 where
-    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone + PartialOrd,
-    V: Weighted + Send + Sync + Clone,
+    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone,
+    V: Send + Sync + Clone,
 {
     fn first_key(&self) -> Option<K> {
         self.cache_metadata.first_key.clone()

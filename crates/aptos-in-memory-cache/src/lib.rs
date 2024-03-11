@@ -20,18 +20,13 @@ where
 
 pub trait Ordered<K>: Send + Sync
 where
-    K: PartialOrd + Clone + Send + Sync,
+    K: Clone + Send + Sync,
 {
     /// Returns the first key in the cache. Returns [`None`] if the cache is empty.
     fn first_key(&self) -> Option<K>;
 
     /// Returns the last key in the cache. Returns [`None`] if the cache is empty.
     fn last_key(&self) -> Option<K>;
-}
-
-pub trait Weighted: Send + Sync {
-    /// Returns the size of the value in bytes.
-    fn weight(&self) -> u64;
 }
 
 pub trait Incrementable<V>: Send + Sync
