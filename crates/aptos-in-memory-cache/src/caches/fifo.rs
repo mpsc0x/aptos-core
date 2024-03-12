@@ -48,29 +48,33 @@ where
         cache_metadata.first_key = Some(k.next(&v));
         let weight = std::mem::size_of_val(&v) as u64;
         cache_metadata.total_size_in_bytes -= weight;
+        println!(
+            "evicted, total_size_in_bytes: {}, max_size_in_bytes: {}",
+            cache_metadata.total_size_in_bytes, cache_metadata.max_size_in_bytes
+        );
         weight
     }
 
     fn evict(&self, new_value_weight: u64) -> (u64, u64) {
         let mut garbage_collection_count = 0;
         let mut garbage_collection_size = 0;
-        let cache_metadata = self.cache_metadata.read().unwrap(); // cleanup
-        while cache_metadata.total_size_in_bytes + new_value_weight
-            > cache_metadata.max_size_in_bytes
-        {
+        loop {
+            let cache_metadata = self.cache_metadata.read().unwrap(); // cleanup
+            if cache_metadata.total_size_in_bytes + new_value_weight
+                <= cache_metadata.max_size_in_bytes
+            {
+                break;
+            }
             println!(
                 "evicting, total_size_in_bytes: {}, new_value_weight: {}, max_size_in_bytes: {}",
                 cache_metadata.total_size_in_bytes,
                 new_value_weight,
-                cache_metadata.max_size_in_bytes
+                cache_metadata.max_size_in_bytes,
             );
+            drop(cache_metadata);
             let weight = self.pop();
             garbage_collection_count += 1;
             garbage_collection_size += weight;
-            println!(
-                "evicted, total_size_in_bytes: {}, max_size_in_bytes: {}",
-                cache_metadata.total_size_in_bytes, cache_metadata.max_size_in_bytes
-            )
         }
         (garbage_collection_count, garbage_collection_size)
     }
