@@ -3,7 +3,7 @@
 
 use crate::{Cache, Incrementable, Ordered};
 use dashmap::DashMap;
-use std::hash::Hash;
+use std::{hash::Hash, sync::RwLock};
 
 #[derive(Debug, Clone, Copy)]
 struct CacheMetadata<K> {
@@ -21,7 +21,7 @@ where
 {
     /// Cache maps the cache key to the deserialized Transaction.
     items: DashMap<K, V>,
-    cache_metadata: CacheMetadata<K>,
+    cache_metadata: RwLock<CacheMetadata<K>>,
 }
 
 impl<K, V> FIFOCache<K, V>
@@ -32,34 +32,37 @@ where
     pub fn new(max_size_in_bytes: u64) -> Self {
         FIFOCache {
             items: DashMap::new(),
-            cache_metadata: CacheMetadata {
+            cache_metadata: RwLock::new(CacheMetadata {
                 max_size_in_bytes,
                 total_size_in_bytes: 0,
                 last_key: None,
                 first_key: None,
-            },
+            }),
         }
     }
 
-    fn pop(&mut self) -> Option<u64> {
-        if let Some(first_key) = self.cache_metadata.first_key.clone() {
+    fn pop(&self) -> Option<u64> {
+        let cache_metadata = self.cache_metadata.read().unwrap(); // cleanup
+        if let Some(first_key) = cache_metadata.first_key.clone() {
             let value = self.items.get(&first_key).unwrap(); // cleanup
             let next_key = first_key.next(value.value());
+            let mut cache_metadata = self.cache_metadata.write().unwrap(); // cleanup
             return self.items.remove(&first_key).map(|(_, v)| {
                 let weight = std::mem::size_of_val(&v) as u64;
-                self.cache_metadata.first_key = Some(next_key);
-                self.cache_metadata.total_size_in_bytes -= weight;
+                cache_metadata.first_key = Some(next_key);
+                cache_metadata.total_size_in_bytes -= weight;
                 weight
             });
         }
         None
     }
 
-    fn evict(&mut self, new_value_weight: u64) -> (u64, u64) {
+    fn evict(&self, new_value_weight: u64) -> (u64, u64) {
         let mut garbage_collection_count = 0;
         let mut garbage_collection_size = 0;
-        while self.cache_metadata.total_size_in_bytes + new_value_weight
-            > self.cache_metadata.max_size_in_bytes
+        let cache_metadata = self.cache_metadata.read().unwrap(); // cleanup
+        while cache_metadata.total_size_in_bytes + new_value_weight
+            > cache_metadata.max_size_in_bytes
         {
             if let Some(weight) = self.pop() {
                 garbage_collection_count += 1;
@@ -69,9 +72,10 @@ where
         (garbage_collection_count, garbage_collection_size)
     }
 
-    fn insert_impl(&mut self, key: K, value: V) {
-        self.cache_metadata.last_key = Some(key.clone());
-        self.cache_metadata.total_size_in_bytes += std::mem::size_of_val(&value) as u64;
+    fn insert_impl(&self, key: K, value: V) {
+        let mut cache_metadata = self.cache_metadata.write().unwrap(); // cleanup
+        cache_metadata.last_key = Some(key.clone());
+        cache_metadata.total_size_in_bytes += std::mem::size_of_val(&value) as u64;
         self.items.insert(key, value);
     }
 }
@@ -85,10 +89,11 @@ where
         self.items.get(key).map(|v| v.value().clone())
     }
 
-    fn insert(&mut self, key: K, value: V) -> (u64, u64) {
+    fn insert(&self, key: K, value: V) -> (u64, u64) {
         // If cache is empty, set the first to the new key.
         if self.items.is_empty() {
-            self.cache_metadata.first_key = Some(key.clone());
+            let mut cache_metadata = self.cache_metadata.write().unwrap(); // cleanup
+            cache_metadata.first_key = Some(key.clone());
         }
 
         // Evict until enough space is available for next value.
@@ -98,6 +103,11 @@ where
 
         return (garbage_collection_count, garbage_collection_size);
     }
+
+    fn total_size(&self) -> u64 {
+        let cache_metadata = self.cache_metadata.read().unwrap(); // cleanup
+        cache_metadata.total_size_in_bytes
+    }
 }
 
 impl<K, V> Ordered<K> for FIFOCache<K, V>
@@ -106,10 +116,12 @@ where
     V: Send + Sync + Clone,
 {
     fn first_key(&self) -> Option<K> {
-        self.cache_metadata.first_key.clone()
+        let cache_metadata = self.cache_metadata.read().unwrap(); // cleanup
+        cache_metadata.first_key.clone()
     }
 
     fn last_key(&self) -> Option<K> {
-        self.cache_metadata.last_key.clone()
+        let cache_metadata = self.cache_metadata.read().unwrap(); // cleanup
+        cache_metadata.last_key.clone()
     }
 }

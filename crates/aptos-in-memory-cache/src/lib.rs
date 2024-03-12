@@ -15,7 +15,10 @@ where
     fn get(&self, key: &K) -> Option<V>;
 
     /// Inserts a given key-value pair in cache. Panics if the insert fails.
-    fn insert(&mut self, key: K, value: V) -> (u64, u64);
+    fn insert(&self, key: K, value: V) -> (u64, u64);
+
+    /// Returns the total size of the cache.
+    fn total_size(&self) -> u64;
 }
 
 pub trait Ordered<K>: Send + Sync
