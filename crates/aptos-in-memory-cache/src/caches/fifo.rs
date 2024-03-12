@@ -48,10 +48,6 @@ where
         cache_metadata.first_key = Some(k.next(&v));
         let weight = std::mem::size_of_val(&v) as u64;
         cache_metadata.total_size_in_bytes -= weight;
-        println!(
-            "evicted, total_size_in_bytes: {}, max_size_in_bytes: {}",
-            cache_metadata.total_size_in_bytes, cache_metadata.max_size_in_bytes
-        );
         weight
     }
 
@@ -65,12 +61,6 @@ where
             {
                 break;
             }
-            println!(
-                "evicting, total_size_in_bytes: {}, new_value_weight: {}, max_size_in_bytes: {}",
-                cache_metadata.total_size_in_bytes,
-                new_value_weight,
-                cache_metadata.max_size_in_bytes,
-            );
             drop(cache_metadata);
             let weight = self.pop();
             garbage_collection_count += 1;
