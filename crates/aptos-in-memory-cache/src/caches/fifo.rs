@@ -41,20 +41,14 @@ where
         }
     }
 
-    fn pop(&self) -> Option<u64> {
-        let cache_metadata = self.cache_metadata.read().unwrap(); // cleanup
-        if let Some(first_key) = cache_metadata.first_key.clone() {
-            let value = self.items.get(&first_key).unwrap(); // cleanup
-            let next_key = first_key.next(value.value());
-            let mut cache_metadata = self.cache_metadata.write().unwrap(); // cleanup
-            return self.items.remove(&first_key).map(|(_, v)| {
-                let weight = std::mem::size_of_val(&v) as u64;
-                cache_metadata.first_key = Some(next_key);
-                cache_metadata.total_size_in_bytes -= weight;
-                weight
-            });
-        }
-        None
+    fn pop(&self) -> u64 {
+        let mut cache_metadata = self.cache_metadata.write().unwrap(); // cleanup
+        let first_key = cache_metadata.first_key.clone().unwrap();
+        let (k, v) = self.items.remove(&first_key).unwrap(); // cleanup
+        cache_metadata.first_key = Some(k.next(&v));
+        let weight = std::mem::size_of_val(&v) as u64;
+        cache_metadata.total_size_in_bytes -= weight;
+        weight
     }
 
     fn evict(&self, new_value_weight: u64) -> (u64, u64) {
@@ -64,10 +58,9 @@ where
         while cache_metadata.total_size_in_bytes + new_value_weight
             > cache_metadata.max_size_in_bytes
         {
-            if let Some(weight) = self.pop() {
-                garbage_collection_count += 1;
-                garbage_collection_size += weight;
-            }
+            let weight = self.pop();
+            garbage_collection_count += 1;
+            garbage_collection_size += weight;
         }
         (garbage_collection_count, garbage_collection_size)
     }
