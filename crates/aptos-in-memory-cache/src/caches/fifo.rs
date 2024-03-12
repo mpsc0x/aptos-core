@@ -58,9 +58,19 @@ where
         while cache_metadata.total_size_in_bytes + new_value_weight
             > cache_metadata.max_size_in_bytes
         {
+            println!(
+                "evicting, total_size_in_bytes: {}, new_value_weight: {}, max_size_in_bytes: {}",
+                cache_metadata.total_size_in_bytes,
+                new_value_weight,
+                cache_metadata.max_size_in_bytes
+            );
             let weight = self.pop();
             garbage_collection_count += 1;
             garbage_collection_size += weight;
+            println!(
+                "evicted, total_size_in_bytes: {}, max_size_in_bytes: {}",
+                cache_metadata.total_size_in_bytes, cache_metadata.max_size_in_bytes
+            )
         }
         (garbage_collection_count, garbage_collection_size)
     }
