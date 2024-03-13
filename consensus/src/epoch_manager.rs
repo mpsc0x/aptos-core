@@ -169,6 +169,7 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     dag_config: DagConsensusConfig,
     payload_manager: Arc<PayloadManager>,
     rand_storage: Arc<dyn RandStorage<AugmentedData>>,
+    peers_and_metadata: Arc<PeersAndMetadata>,
 }
 
 impl<P: OnChainConfigProvider> EpochManager<P> {
@@ -187,6 +188,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         aptos_time_service: aptos_time_service::TimeService,
         vtxn_pool: VTxnPoolState,
         rand_storage: Arc<dyn RandStorage<AugmentedData>>,
+        peers_and_metadata: Arc<PeersAndMetadata>,
     ) -> Self {
         let author = node_config.validator_network.as_ref().unwrap().peer_id();
         let config = node_config.consensus.clone();
@@ -228,6 +230,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             dag_config,
             payload_manager: Arc::new(PayloadManager::DirectMempool),
             rand_storage,
+            peers_and_metadata,
         }
     }
 
@@ -1199,6 +1202,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             onchain_consensus_config.effective_validator_txn_config(),
             self.bounded_executor.clone(),
             features.clone(),
+            self.peers_and_metadata.clone(),
         );
 
         let (dag_rpc_tx, dag_rpc_rx) = aptos_channel::new(
