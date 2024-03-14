@@ -1891,6 +1891,7 @@ name = "aptos-in-memory-cache"
 version = "0.1.0"
 dependencies = [
  "dashmap",
+ "parking_lot 0.12.1",
  "quick_cache",
  "tokio",
 ]

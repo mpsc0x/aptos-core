@@ -3,7 +3,8 @@
 
 use crate::{Cache, Incrementable, Ordered};
 use dashmap::DashMap;
-use std::{hash::Hash, sync::RwLock};
+use parking_lot::RwLock;
+use std::hash::Hash;
 
 #[derive(Debug, Clone, Copy)]
 struct CacheMetadata<K> {
@@ -42,7 +43,7 @@ where
     }
 
     fn pop(&self) -> u64 {
-        let mut cache_metadata = self.cache_metadata.write().unwrap(); // cleanup
+        let mut cache_metadata = self.cache_metadata.write();
         let first_key = cache_metadata.first_key.clone().unwrap();
         let (k, v) = self.items.remove(&first_key).unwrap(); // cleanup
         cache_metadata.first_key = Some(k.next(&v));
@@ -55,7 +56,7 @@ where
         let mut garbage_collection_count = 0;
         let mut garbage_collection_size = 0;
         loop {
-            let cache_metadata = self.cache_metadata.read().unwrap(); // cleanup
+            let cache_metadata = self.cache_metadata.read();
             if cache_metadata.total_size_in_bytes + new_value_weight
                 <= cache_metadata.max_size_in_bytes
             {
@@ -70,7 +71,7 @@ where
     }
 
     fn insert_impl(&self, key: K, value: V) {
-        let mut cache_metadata = self.cache_metadata.write().unwrap(); // cleanup
+        let mut cache_metadata = self.cache_metadata.write();
         cache_metadata.last_key = Some(key.clone());
         cache_metadata.total_size_in_bytes += std::mem::size_of_val(&value) as u64;
         self.items.insert(key, value);
@@ -89,7 +90,7 @@ where
     fn insert(&self, key: K, value: V) -> (u64, u64) {
         // If cache is empty, set the first to the new key.
         if self.items.is_empty() {
-            let mut cache_metadata = self.cache_metadata.write().unwrap(); // cleanup
+            let mut cache_metadata = self.cache_metadata.write();
             cache_metadata.first_key = Some(key.clone());
         }
 
@@ -102,7 +103,7 @@ where
     }
 
     fn total_size(&self) -> u64 {
-        let cache_metadata = self.cache_metadata.read().unwrap(); // cleanup
+        let cache_metadata = self.cache_metadata.read();
         cache_metadata.total_size_in_bytes
     }
 }
@@ -113,12 +114,12 @@ where
     V: Send + Sync + Clone,
 {
     fn first_key(&self) -> Option<K> {
-        let cache_metadata = self.cache_metadata.read().unwrap(); // cleanup
+        let cache_metadata = self.cache_metadata.read();
         cache_metadata.first_key.clone()
     }
 
     fn last_key(&self) -> Option<K> {
-        let cache_metadata = self.cache_metadata.read().unwrap(); // cleanup
+        let cache_metadata = self.cache_metadata.read();
         cache_metadata.last_key.clone()
     }
 }
