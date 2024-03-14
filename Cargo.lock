@@ -1571,6 +1571,7 @@ dependencies = [
  "aptos-types",
  "bcs 0.1.4",
  "bytes",
+ "dashmap",
  "fail 0.5.1",
  "once_cell",
  "rand 0.7.3",

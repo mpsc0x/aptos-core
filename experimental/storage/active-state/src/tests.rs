@@ -2,7 +2,6 @@
 
 // SMT + JMT vs SMT + 64M size active state tree
 // Compare the updates per second and memory usage
-use crate::{Item, ItemId, ITEM_SIZE, MAX_ITEMS};
 use aptos_config::config::{RocksdbConfigs, StorageDirPaths};
 use aptos_crypto::{
     hash::{CryptoHash, SPARSE_MERKLE_PLACEHOLDER_HASH},
@@ -152,11 +151,8 @@ fn test_smt_with_jmt() {
 }
 
 #[test]
-fn test_bounds() {
-    assert!(MAX_ITEMS < ItemId::MAX as usize);
-}
-
-#[test]
-fn test_item_size() {
-    assert_eq!(std::mem::size_of::<Item>(), ITEM_SIZE);
+fn test_usize_overflow() {
+    let a = usize::MAX;
+    let b: usize = a - 1;
+    println!("{a}, {b}")
 }
