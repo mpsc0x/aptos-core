@@ -45,6 +45,7 @@ pub enum NativeResult {
         partial_cost: InternalGas,
     },
     CallFunction {
+        cost: InternalGas,
         module_name: ModuleId,
         func_name: Identifier,
         ty_args: Vec<Type>,

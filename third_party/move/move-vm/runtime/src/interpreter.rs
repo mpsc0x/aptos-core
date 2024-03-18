@@ -567,11 +567,13 @@ impl Interpreter {
                 Err(err)
             },
             NativeResult::CallFunction {
+                cost,
                 module_name,
                 func_name,
                 ty_args,
                 args,
             } => {
+                gas_meter.charge_native_function(cost, Option::<std::iter::Empty<&Value>>::None)?;
                 resolver
                     .loader()
                     .load_module(&module_name, data_store, module_store)
