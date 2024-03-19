@@ -67,7 +67,7 @@ pub(crate) fn extract_function_info(
 /***************************************************************************************************
  * native fun check_dispatch_type_compatibility_impl
  *
- *   Returns true if the function argument types of rhs is the same as (&FunctionInfo || arguments type of lhs)
+ *   Returns true if the function argument types of rhs is the same as (arguments type of lhs || &FunctionInfo)
  *   gas cost: base_cost + unit_cost * type_size
  *
  **************************************************************************************************/
@@ -103,7 +103,7 @@ fn native_check_dispatch_type_compatibility_impl(
     Ok(smallvec![Value::bool(
         rhs.type_parameters == lhs.type_parameters
             && rhs.return_types == lhs.return_types
-            && lhs.parameter_types[1..] == rhs.parameter_types
+            && lhs.parameter_types[0 .. lhs.parameter_types.len() - 1] == rhs.parameter_types
     )])
 }
 
