@@ -4377,8 +4377,6 @@ dependencies = [
  "aptos-utils",
  "aptos-vm-logging",
  "aptos-vm-types",
- "ark-bn254",
- "ark-groth16",
  "base64-url",
  "bcs 0.1.4",
  "bytes",
