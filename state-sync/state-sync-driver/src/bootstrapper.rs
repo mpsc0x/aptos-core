@@ -142,10 +142,10 @@ impl VerifiedEpochStates {
 
             // Verify we haven't missed the waypoint
             if ledger_info_version > waypoint_version {
-                return Err(Error::VerificationError(
-                    format!("Failed to verify the waypoint: ledger info version is too high! Waypoint version: {:?}, ledger info version: {:?}",
-                            waypoint_version, ledger_info_version)
-                ));
+                panic!(
+                    "Failed to verify the waypoint: ledger info version is too high! Waypoint version: {:?}, ledger info version: {:?}",
+                    waypoint_version, ledger_info_version
+                );
             }
 
             // Check if we've found the ledger info corresponding to the waypoint version
@@ -153,10 +153,10 @@ impl VerifiedEpochStates {
                 match waypoint.verify(ledger_info) {
                     Ok(()) => self.set_verified_waypoint(waypoint_version),
                     Err(error) => {
-                        return Err(Error::VerificationError(
-                            format!("Failed to verify the waypoint: {:?}! Waypoint: {:?}, given ledger info: {:?}",
-                                    error, waypoint, ledger_info)
-                        ));
+                        panic!(
+                            "Failed to verify the waypoint: {:?}! Waypoint: {:?}, given ledger info: {:?}",
+                            error, waypoint, ledger_info
+                        );
                     },
                 }
             }
@@ -865,7 +865,11 @@ impl<
             self.verified_epoch_states
                 .set_fetched_epoch_ending_ledger_infos();
         } else {
-            return Err(Error::AdvertisedDataError("Our waypoint is unverified, but there's no higher epoch ending ledger infos advertised!".into()));
+            return Err(Error::AdvertisedDataError(format!(
+                "Our waypoint is unverified, but there's no higher epoch ending ledger infos \
+                advertised! Highest local epoch end: {:?}, highest advertised epoch end: {:?}",
+                highest_local_epoch_end, highest_advertised_epoch_end
+            )));
         };
 
         Ok(())
