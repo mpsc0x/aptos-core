@@ -14,11 +14,12 @@ use aptos_types::{
 use bytes::Bytes;
 use dashmap::DashMap;
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
+    atomic::{AtomicU32, AtomicU64, Ordering},
     mpsc::{channel, Receiver, Sender},
     Arc,
 };
-pub mod atomic_bitmap;
+
+use aptos_scratchpad::sparse_merkle::node::NodeHandle;
 #[cfg(test)]
 pub mod tests;
 
@@ -30,18 +31,14 @@ const MAX_BYTES_PER_ITEM: usize = 1 << 10; // 1KB per item
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 struct StateKeyHash(HashValue);
 
-//TODO(bowu) check the order is correct after hashing
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-struct LeafNodeId {
-    pub version: Version,
-    pub slot: u32, // slot with range [0, MAX_ITEMS)
-    pub state_key_hash: StateKeyHash,
-}
+// index of the the item in the vector
+type ItemId = u32;
 
-struct LeafNode {
-    id: LeafNodeId,
-    last_used: AtomicU64,
-    value: Value,
+struct Item {
+    id: ItemId,
+    node: NodeHandle<StateValue>, // a refence to the node in SMT
+    previous: Option<ItemId>,
+    next: Option<ItemId>,
 }
 
 enum Value {
@@ -49,51 +46,24 @@ enum Value {
     OnDisk { size: u16 },
 }
 
-// Wrapper of updates to be persisted to active state tree and jmt repsectively
-pub struct TreeDbUpdates {
-    active_state_tree_updates: Vec<(LeafNodeId, LeafNode)>,
-    jmt_updates: Vec<(StateKey, StateValue)>,
+struct ActiveState {
+    items: Vec<Item>,
+    used_slots_cnt: AtomicU32,
+    existing_items: DashMap<StateKeyHash, ItemId>,
+    latest_item: Option<ItemId>,
+    oldest_in_mem_item: Option<ItemId>,
+    oldest_item: Option<ItemId>,
 }
 
-// Active State Tree Proof, used to prove the existence of a leaf node in the active state tree
-struct ActiveStateTreeProof {
-    leaf_node: Option<LeafNode>,
-    siblings: Vec<HashValue>,
-}
-
-// used to prove the existence of a range of leaf nodes in the active state tree
-struct ActiveStateTreeRangeProof {
-    right_siblings: Vec<HashValue>,
-}
-
-// ActiveStateTree (ast) is a complete binary tree
-// It provides a conconcurrent LRU cache for a dense state merkel tree.
-// It garantees the num of leaf nodes is always less than MAX_ITEMS.
-// It will garentee the total size of tree in mem is less than MAX_BYTES after background maintenance done.
-struct ActiveStateTree {
-    items: DashMap<HashValue, LeafNode>,
-    internal_nodes: [HashValue; MAX_ITEMS],
-    used_slots_cnt: AtomicU64,
-    slot_bitmap: Arc<AtomicBitmap>,
-    max_occupied_slots: u64, // in case we don't want to completely fill the tree
-    global_usage_count: AtomicU64, // track the most recent usage count
-    oldest_usage_count_in_mem_value: AtomicU64, // track the oldest usage count of in-memory value
-    oldest_usage_count: AtomicU64, // track the oldest usage count
-    tree_maintainer: Sender<ActiveStateTreeUpdate>, // notify the maintainer to update the cache
-}
-
-impl ActiveStateTree {
-    pub fn new(tree_maintainer: Sender<ActiveStateTreeUpdate>) -> Self {
-        ActiveStateTree {
-            items: DashMap::new(),
-            internal_nodes: [HashValue::zero(); MAX_ITEMS],
-            used_slots_cnt: AtomicU64::new(0),
-            slot_bitmap: Arc::new(AtomicBitmap::new(64_000_000)),
-            max_occupied_slots: (MAX_ITEMS / 2) as u64,
-            global_usage_count: AtomicU64::new(0),
-            oldest_usage_count_in_mem_value: AtomicU64::new(0),
-            oldest_usage_count: AtomicU64::new(0),
-            tree_maintainer,
+impl ActiveState {
+    pub fn new() -> Self {
+        ActiveState {
+            items: Vec::new(),
+            used_slots_cnt: AtomicU32::new(0),
+            existing_items: DashMap::new(),
+            latest_item: None,
+            oldest_in_mem_item: None,
+            oldest_item: None,
         }
     }
 
@@ -101,8 +71,51 @@ impl ActiveStateTree {
     pub fn batch_put_value_set(
         &mut self,
         value_set: Vec<(StateKey, StateValue)>,
-    ) -> Result<TreeDbUpdates> {
-        unimplemented!()
+    ) -> Result<()> {
+        // TODO(bowu): we should return the updates that need to be persisted
+        for (key, value) in value_set {
+            let state_key_hash = key.hash();
+            // if key in the cache, update the cache only
+            if self.items.contains_key(&state_key_hash) {
+                let mut item = self.items.get_mut(&state_key_hash).unwrap();
+                // update the negihbors' next and previous item
+                if let Some(previous_item) = item.previous {
+                    previous_item.next = item.next;
+                }
+                // update the item's next and previous item
+                item.next = None;
+                item.previous = self.latest_item_key;
+                // make the item the latest item
+                self.latest_item_key = Some(state_key_hash);
+            } else {
+                // if the key is not in the cache, check if eviction is required and then try to add the new
+                if self.used_slots_cnt >= MAX_ITEMS {
+                    // evict the oldest item
+                    self.evict_oldest_item()?;
+                }
+                // find an avaliable slot
+
+
+            }
+        }
+
+    }
+
+    fn evict_oldest_item(&mut self) -> Result<()> {
+        // evict the oldest item
+        if let Some(oldest_item_key) = self.oldest_item_key {
+            let oldest_item = self.items.remove(&oldest_item_key).unwrap();
+            self.used_slots_cnt -= 1;
+            // update the neighbors
+            if let Some(next_item) = oldest_item.next {
+                next_item.previous = None;
+                self.oldest_item_key = next_item.next;
+            } else {
+                // no other items in the cache
+                self.oldest_item_key = None;
+            }
+        }
+        Ok(())
     }
 
     fn add_leaf_node(&mut self, key: StateKey, value: StateValue, version: Version) -> Result<()> {
