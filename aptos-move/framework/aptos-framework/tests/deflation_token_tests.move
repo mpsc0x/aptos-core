@@ -48,7 +48,7 @@ module aptos_framework::deflation_token_tests {
     }
 
     #[test(creator = @0xcafe)]
-    #[expected_failure(abort_code = 0x10003, location = aptos_framework::fungible_asset)]
+    #[expected_failure(abort_code = 0x10019, location = aptos_framework::fungible_asset)]
     fun test_deflation_fa_deposit(
         creator: &signer,
     ) {
@@ -69,7 +69,7 @@ module aptos_framework::deflation_token_tests {
     }
 
     #[test(creator = @0xcafe, aaron = @0xface)]
-    #[expected_failure(abort_code = 0x10003, location = aptos_framework::fungible_asset)]
+    #[expected_failure(abort_code = 0x10019, location = aptos_framework::fungible_asset)]
     fun test_deflation_fa_withdraw(
         creator: &signer,
         aaron: &signer,
@@ -96,7 +96,7 @@ module aptos_framework::deflation_token_tests {
     }
 
     #[test(creator = @0xcafe, aaron = @0xface)]
-    #[expected_failure(abort_code = 0x80005, location = aptos_framework::dispatchable_fungible_asset)]
+    #[expected_failure(abort_code = 0x8001A, location = aptos_framework::fungible_asset)]
     fun test_double_init(
         creator: &signer,
     ) {
@@ -121,7 +121,7 @@ module aptos_framework::deflation_token_tests {
     }
 
     #[test(creator = @0xcafe)]
-    #[expected_failure(abort_code = 0x10001, location = aptos_framework::dispatchable_fungible_asset)]
+    #[expected_failure(abort_code = 0x10017, location = aptos_framework::fungible_asset)]
     fun test_register_bad_withdraw(
         creator: &signer,
     ) {
@@ -138,7 +138,7 @@ module aptos_framework::deflation_token_tests {
     }
 
     #[test(creator = @0xcafe)]
-    #[expected_failure(abort_code = 0x10002, location = aptos_framework::dispatchable_fungible_asset)]
+    #[expected_failure(abort_code = 0x10018, location = aptos_framework::fungible_asset)]
     fun test_register_bad_deposit(
         creator: &signer,
     ) {
