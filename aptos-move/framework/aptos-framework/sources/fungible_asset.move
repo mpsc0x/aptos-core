@@ -3,6 +3,7 @@
 module aptos_framework::fungible_asset {
     use aptos_framework::aggregator_v2::{Self, Aggregator};
     use aptos_framework::event;
+    use aptos_framework::function_info::{Self, FunctionInfo};
     use aptos_framework::object::{Self, Object, ConstructorRef, DeleteRef, ExtendRef};
     use std::string;
     use std::features;
@@ -11,6 +12,8 @@ module aptos_framework::fungible_asset {
     use std::option::{Self, Option};
     use std::signer;
     use std::string::String;
+
+    friend aptos_framework::dispatchable_fungible_asset;
 
     /// Amount cannot be zero.
     const EAMOUNT_CANNOT_BE_ZERO: u64 = 1;
@@ -56,6 +59,14 @@ module aptos_framework::fungible_asset {
     const ESUPPLY_NOT_FOUND: u64 = 21;
     /// Flag for Concurrent Supply not enabled
     const ECONCURRENT_SUPPLY_NOT_ENABLED: u64 = 22;
+    /// Provided withdraw function type doesn't meet the signature requirement.
+    const EWITHDRAW_FUNCTION_SIGNATURE_MISMATCH: u64 = 23;
+    /// Provided deposit function type doesn't meet the signature requirement.
+    const EDEPOSIT_FUNCTION_SIGNATURE_MISMATCH: u64 = 24;
+    /// Invalid withdraw/deposit on dispatchable token.
+    const EINVALID_DISPATCHABLE_OPERATIONS: u64 = 25;
+    /// Trying to re-register dispatch hook on a fungible asset.
+    const EALREADY_REGISTERED: u64 = 26;
 
     //
     // Constants
@@ -101,11 +112,6 @@ module aptos_framework::fungible_asset {
     }
 
     #[resource_group_member(group = aptos_framework::object::ObjectGroup)]
-    struct GlobalFreeze has key {
-        frozen: bool,
-    }
-
-    #[resource_group_member(group = aptos_framework::object::ObjectGroup)]
     /// The store object that holds fungible assets of a specific type associated with an account.
     struct FungibleStore has key {
         /// The address of the base metadata object.
@@ -114,6 +120,12 @@ module aptos_framework::fungible_asset {
         balance: u64,
         /// If true, owner transfer is disabled that only `TransferRef` can move in/out from this store.
         frozen: bool,
+    }
+
+    #[resource_group_member(group = aptos_framework::object::ObjectGroup)]
+    struct DispatchFunctionStore has key {
+		withdraw_function: FunctionInfo,
+		deposit_function: FunctionInfo,
     }
 
     /// FungibleAsset can be passed into function for type safety and to guarantee a specific amount.
@@ -210,6 +222,46 @@ module aptos_framework::fungible_asset {
         };
 
         object::object_from_constructor_ref<Metadata>(constructor_ref)
+    }
+
+    /// Create a fungible asset store whose transfer rule would be overloaded by the provided function.
+    public(friend) fun register_dispatch_functions(
+        constructor_ref: &ConstructorRef,
+        withdraw_function: FunctionInfo,
+		deposit_function: FunctionInfo,
+    ) {
+        let dispatcher_withdraw_function_info = function_info::new_function_info(
+	        @aptos_framework,
+            string::utf8(b"dispatchable_fungible_asset"),
+            string::utf8(b"dispatchable_withdraw"),
+        );
+        // Verify that caller type matches callee type so wrongly typed function cannot be registered.
+        assert!(function_info::check_dispatch_type_compatibility(
+            &dispatcher_withdraw_function_info,
+            &withdraw_function
+        ), error::invalid_argument(EWITHDRAW_FUNCTION_SIGNATURE_MISMATCH));
+
+        let dispatcher_deposit_function_info = function_info::new_function_info(
+	        @aptos_framework,
+            string::utf8(b"dispatchable_fungible_asset"),
+            string::utf8(b"dispatchable_deposit"),
+        );
+        // Verify that caller type matches callee type so wrongly typed function cannot be registered.
+        assert!(function_info::check_dispatch_type_compatibility(
+            &dispatcher_deposit_function_info,
+            &deposit_function
+        ), error::invalid_argument(EDEPOSIT_FUNCTION_SIGNATURE_MISMATCH));
+
+        assert!(!object::can_generate_delete_ref(constructor_ref), error::invalid_argument(EOBJECT_IS_DELETABLE));
+        assert!(!exists<DispatchFunctionStore>(object::address_from_constructor_ref(constructor_ref)), error::already_exists(EALREADY_REGISTERED));
+
+        let store_obj = &object::generate_signer(constructor_ref);
+
+        // Store the overload function hook.
+        move_to<DispatchFunctionStore>(store_obj, DispatchFunctionStore {
+            withdraw_function,
+		    deposit_function,
+        });
     }
 
     /// Creates a mint ref that can be used to mint fungible assets from the given fungible object's constructor ref.
@@ -324,20 +376,28 @@ module aptos_framework::fungible_asset {
     /// Return whether a store is frozen.
     ///
     /// If the store has not been created, we default to returning false so deposits can be sent to it.
-    public fun is_frozen<T: key>(store: Object<T>): bool acquires FungibleStore, GlobalFreeze {
-        if(!store_exists(object::object_address(&store))) {
-            return false
-        };
+    public fun is_frozen<T: key>(store: Object<T>): bool acquires FungibleStore {
+        store_exists(object::object_address(&store)) && borrow_store_resource(&store).frozen
+    }
 
+    #[view]
+    /// Return whether a fungible asset type is dispatchable.
+    public fun is_dispatchable<T: key>(store: Object<T>): bool acquires FungibleStore {
         let fa_store = borrow_store_resource(&store);
         let metadata_addr = object::object_address(&fa_store.metadata);
-        let global_freeze = if(exists<GlobalFreeze>(metadata_addr)) {
-            borrow_global<GlobalFreeze>(metadata_addr).frozen
-        } else {
-            false
-        };
+        exists<DispatchFunctionStore>(metadata_addr)
+    }
 
-         fa_store.frozen || global_freeze
+    public(friend) fun deposit_function<T: key>(store: Object<T>): FunctionInfo acquires FungibleStore, DispatchFunctionStore {
+        let fa_store = borrow_store_resource(&store);
+        let metadata_addr = object::object_address(&fa_store.metadata);
+        borrow_global<DispatchFunctionStore>(metadata_addr).deposit_function
+    }
+
+    public(friend) fun withdraw_function<T: key>(store: Object<T>): FunctionInfo acquires FungibleStore, DispatchFunctionStore {
+        let fa_store = borrow_store_resource(&store);
+        let metadata_addr = object::object_address(&fa_store.metadata);
+        borrow_global<DispatchFunctionStore>(metadata_addr).withdraw_function
     }
 
     public fun asset_metadata(fa: &FungibleAsset): Object<Metadata> {
@@ -366,7 +426,7 @@ module aptos_framework::fungible_asset {
         from: Object<T>,
         to: Object<T>,
         amount: u64,
-    ) acquires FungibleStore, GlobalFreeze {
+    ) acquires FungibleStore {
         let fa = withdraw(sender, from, amount);
         deposit(to, fa);
     }
@@ -411,15 +471,17 @@ module aptos_framework::fungible_asset {
         owner: &signer,
         store: Object<T>,
         amount: u64,
-    ): FungibleAsset acquires FungibleStore, GlobalFreeze {
+    ): FungibleAsset acquires FungibleStore {
         assert!(object::owns(store, signer::address_of(owner)), error::permission_denied(ENOT_STORE_OWNER));
         assert!(!is_frozen(store), error::invalid_argument(ESTORE_IS_FROZEN));
+        assert!(!is_dispatchable(store), error::invalid_argument(EINVALID_DISPATCHABLE_OPERATIONS));
         withdraw_internal(object::object_address(&store), amount)
     }
 
     /// Deposit `amount` of the fungible asset to `store`.
-    public fun deposit<T: key>(store: Object<T>, fa: FungibleAsset) acquires FungibleStore, GlobalFreeze {
+    public fun deposit<T: key>(store: Object<T>, fa: FungibleAsset) acquires FungibleStore {
         assert!(!is_frozen(store), error::invalid_argument(ESTORE_IS_FROZEN));
+        assert!(!is_dispatchable(store), error::invalid_argument(EINVALID_DISPATCHABLE_OPERATIONS));
         deposit_internal(store, fa);
     }
 
@@ -437,7 +499,7 @@ module aptos_framework::fungible_asset {
 
     /// Mint the specified `amount` of the fungible asset to a destination store.
     public fun mint_to<T: key>(ref: &MintRef, store: Object<T>, amount: u64)
-    acquires FungibleStore, GlobalFreeze, Supply, ConcurrentSupply {
+    acquires FungibleStore, Supply, ConcurrentSupply {
         deposit(store, mint(ref, amount));
     }
 
@@ -455,24 +517,6 @@ module aptos_framework::fungible_asset {
         borrow_global_mut<FungibleStore>(store_addr).frozen = frozen;
 
         event::emit(Frozen { store: store_addr, frozen });
-    }
-
-    /// Enable/disable a store's ability to do direct transfers to this particular type of fungible asset.
-    public fun set_global_frozen_flag(
-        ref: &ExtendRef,
-        frozen: bool,
-    ) acquires GlobalFreeze {
-        let metadata_object_address = object::address_from_extend_ref(ref);
-        let metadata_object_signer = object::generate_signer_for_extending(ref);
-
-        if(exists<GlobalFreeze>(metadata_object_address)) {
-            borrow_global_mut<GlobalFreeze>(metadata_object_address).frozen = frozen;
-        } else {
-            move_to<GlobalFreeze>(&metadata_object_signer, GlobalFreeze {
-                frozen,
-            })
-        };
-        event::emit(Frozen { store: metadata_object_address, frozen });
     }
 
     /// Burns a fungible asset
@@ -782,7 +826,7 @@ module aptos_framework::fungible_asset {
     fun test_e2e_basic_flow(
         creator: &signer,
         aaron: &signer,
-    ) acquires FungibleStore, GlobalFreeze, Supply, ConcurrentSupply {
+    ) acquires FungibleStore, Supply, ConcurrentSupply {
         let (mint_ref, transfer_ref, burn_ref, test_token) = create_fungible_asset(creator);
         let metadata = mint_ref.metadata;
         let creator_store = create_test_store(creator, metadata);
@@ -814,7 +858,7 @@ module aptos_framework::fungible_asset {
     #[expected_failure(abort_code = 0x10003, location = Self)]
     fun test_frozen(
         creator: &signer
-    ) acquires FungibleStore, GlobalFreeze, Supply, ConcurrentSupply {
+    ) acquires FungibleStore, Supply, ConcurrentSupply {
         let (mint_ref, transfer_ref, _burn_ref, _) = create_fungible_asset(creator);
 
         let creator_store = create_test_store(creator, mint_ref.metadata);
@@ -823,26 +867,11 @@ module aptos_framework::fungible_asset {
         deposit(creator_store, fa);
     }
 
-    #[test(creator = @0xcafe)]
-    #[expected_failure(abort_code = 0x10003, location = Self)]
-    fun test_global_frozen(
-        creator: &signer
-    ) acquires FungibleStore, GlobalFreeze, Supply, ConcurrentSupply {
-        let (creator_ref, _) = create_test_token(creator);
-        let (mint_ref, _, _) = init_test_metadata(&creator_ref);
-        let creator_store = create_test_store(creator, mint_ref.metadata);
-        let fa = mint(&mint_ref, 100);
-
-        let extend_ref = object::generate_extend_ref(&creator_ref);
-        set_global_frozen_flag(&extend_ref, true);
-        deposit(creator_store, fa);
-    }
-
     #[test(creator = @0xcafe, aaron = @0xface)]
     fun test_transfer_with_ref(
         creator: &signer,
         aaron: &signer,
-    ) acquires FungibleStore, GlobalFreeze, Supply, ConcurrentSupply {
+    ) acquires FungibleStore, Supply, ConcurrentSupply {
         let (mint_ref, transfer_ref, _burn_ref, _) = create_fungible_asset(creator);
         let metadata = mint_ref.metadata;
         let creator_store = create_test_store(creator, metadata);
