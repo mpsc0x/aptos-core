@@ -142,34 +142,7 @@ kubectl get pvc -o name | grep /fn- | grep -v "e${ERA}-" | xargs -r kubectl dele
 kubectl get secret -o name | grep "genesis-e" | grep -v "e${ERA}-" | xargs -r kubectl delete
 
 upload_genesis_blob() {
-  local genesis_blob_upload_url="${GENESIS_BLOB_UPLOAD_URL}?cluster_name=${CLUSTER_NAME}&namespace=${NAMESPACE}&era=${ERA}&method=PUT"
-  local genesis_blob_path="${WORKSPACE}/genesis.blob"
-  local signed_url status_code
-
-  # Set up a trap to remove the temporary file when the script exits
-  local temp_file="$(mktemp)"
-  trap 'rm -f "$temp_file"' EXIT
-
-  # Get the signed URL for uploading the genesis.blob
-  status_code=$(curl -s -o "$temp_file" -w "%{http_code}" "$genesis_blob_upload_url")
-
-  if [[ "${status_code:0:1}" != "2" ]]; then
-    echo "Failed to get signed URL, server responded with status code $status_code"
-    return 1
-  fi
-
-  signed_url=$(<"$temp_file")
-
-  # Upload the genesis.blob using the signed URL
-  status_code=$(curl -s -o "$temp_file" -w "%{http_code}" -X PUT -T "$genesis_blob_path" "$signed_url")
-
-  if [[ "${status_code:0:1}" != "2" ]]; then
-    echo "Upload failed, server responded with status code $status_code"
-    return 1
-  fi
-
-  echo "Upload successful"
-  return 0
+  return 1 # Force failure for testing
 }
 
 create_secrets() {
