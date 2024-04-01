@@ -36,11 +36,9 @@ class RawTransactionInternal(Protocol):
         prehash.extend(ser.output())
         return bytes(prehash)
 
-    def prehash(self) -> bytes:
-        ...
+    def prehash(self) -> bytes: ...
 
-    def serialize(self, ser: Serializer):
-        ...
+    def serialize(self, ser: Serializer): ...
 
     def sign(self, key: asymmetric_crypto.PrivateKey) -> AccountAuthenticator:
         signature = key.sign(self.keyed())

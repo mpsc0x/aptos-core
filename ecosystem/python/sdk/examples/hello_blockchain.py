@@ -112,7 +112,9 @@ async def main(contract_address: AccountAddress):
 
     a_alice_balance = rest_client.account_balance(alice.address())
     a_bob_balance = rest_client.account_balance(bob.address())
-    [alice_balance, bob_balance] = await asyncio.gather(*[a_alice_balance, a_bob_balance])
+    [alice_balance, bob_balance] = await asyncio.gather(
+        *[a_alice_balance, a_bob_balance]
+    )
 
     print("\n=== Initial Balances ===")
     print(f"Alice: {alice_balance}")

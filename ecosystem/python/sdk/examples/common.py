@@ -9,4 +9,6 @@ FAUCET_URL = os.getenv(
     "APTOS_FAUCET_URL",
     "https://faucet.testnet.aptoslabs.com",
 )  # <:!:section_1
-INDEXER_URL = os.getenv("APTOS_INDEXER_URL", "https://api.testnet.aptoslabs.com/v1/graphql")
+INDEXER_URL = os.getenv(
+    "APTOS_INDEXER_URL", "https://api.testnet.aptoslabs.com/v1/graphql"
+)
