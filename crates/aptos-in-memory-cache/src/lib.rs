@@ -15,7 +15,7 @@ where
     fn get(&self, key: &K) -> Option<V>;
 
     /// Inserts a given key-value pair in cache. Panics if the insert fails.
-    fn insert(&self, key: K, value: V) -> (u64, u64);
+    fn insert(&self, key: K, value: V);
 
     /// Returns the total size of the cache.
     fn total_size(&self) -> u64;

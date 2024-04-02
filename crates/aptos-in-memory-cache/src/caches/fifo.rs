@@ -4,77 +4,114 @@
 use crate::{Cache, Incrementable, Ordered};
 use dashmap::DashMap;
 use parking_lot::RwLock;
-use std::hash::Hash;
+use std::{hash::Hash, sync::Arc, time::Duration};
+use tokio_util::sync::CancellationToken;
+use tracing::info;
+
+const IN_MEMORY_CACHE_GC_INTERVAL_MS: u64 = 100;
 
 #[derive(Debug, Clone, Copy)]
 struct CacheMetadata<K> {
-    max_size_in_bytes: u64,
+    eviction_trigger_size_in_bytes: u64,
+    target_size_in_bytes: u64,
     total_size_in_bytes: u64,
     last_key: Option<K>,
     first_key: Option<K>,
 }
 
-/// FIFO is a simple in-memory cache with a deterministic FIFO eviction policy.
+/// A simple in-memory cache with a deterministic FIFO eviction policy.
 pub struct FIFOCache<K, V>
 where
-    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone,
-    V: Send + Sync + Clone,
+    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone + 'static,
+    V: Send + Sync + Clone + 'static,
 {
     /// Cache maps the cache key to the deserialized Transaction.
     items: DashMap<K, V>,
-    cache_metadata: RwLock<CacheMetadata<K>>,
+    cache_metadata: Arc<RwLock<CacheMetadata<K>>>,
+    _cancellation_token_drop_guard: tokio_util::sync::DropGuard,
 }
 
 impl<K, V> FIFOCache<K, V>
 where
-    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone,
-    V: Send + Sync + Clone,
+    K: Hash + Eq + PartialEq + Incrementable<V> + Send + Sync + Clone + 'static,
+    V: Send + Sync + Clone + 'static,
 {
-    pub fn new(max_size_in_bytes: u64) -> Self {
-        FIFOCache {
-            items: DashMap::new(),
-            cache_metadata: RwLock::new(CacheMetadata {
-                max_size_in_bytes,
-                total_size_in_bytes: 0,
-                last_key: None,
-                first_key: None,
-            }),
+    pub fn new(target_size_in_bytes: u64, eviction_trigger_size_in_bytes: u64) -> Self {
+        let cancellation_token = CancellationToken::new();
+        let items = DashMap::new();
+        let cache_metadata = Arc::new(RwLock::new(CacheMetadata {
+            eviction_trigger_size_in_bytes,
+            target_size_in_bytes,
+            total_size_in_bytes: 0,
+            last_key: None,
+            first_key: None,
+        }));
+
+        Self::spawn_cleanup_task(
+            items.clone(),
+            cache_metadata.clone(),
+            cancellation_token.clone(),
+        );
+
+        Self {
+            items,
+            cache_metadata,
+            _cancellation_token_drop_guard: cancellation_token.drop_guard(),
         }
     }
 
-    fn pop(&self) -> u64 {
-        let mut cache_metadata = self.cache_metadata.write();
-        let first_key = cache_metadata.first_key.clone().unwrap();
-        let (k, v) = self.items.remove(&first_key).unwrap(); // cleanup
-        cache_metadata.first_key = Some(k.next(&v));
-        let weight = std::mem::size_of_val(&v) as u64;
-        cache_metadata.total_size_in_bytes -= weight;
-        weight
-    }
+    /// Perform cache eviction on a separate task.
+    fn spawn_cleanup_task(
+        items: DashMap<K, V>,
+        cache_metadata: Arc<RwLock<CacheMetadata<K>>>,
+        cancellation_token: tokio_util::sync::CancellationToken,
+    ) {
+        tokio::spawn(async move {
+            loop {
+                if cancellation_token.is_cancelled() {
+                    info!("In-memory cache cleanup task is cancelled.");
+                    return;
+                }
 
-    fn evict(&self, new_value_weight: u64) -> (u64, u64) {
-        let mut garbage_collection_count = 0;
-        let mut garbage_collection_size = 0;
-        loop {
-            let cache_metadata = self.cache_metadata.read();
-            if cache_metadata.total_size_in_bytes + new_value_weight
-                <= cache_metadata.max_size_in_bytes
-            {
-                break;
+                // Check if we should evict items from the cache.
+                let should_evict = {
+                    let current_cache_metadata = cache_metadata.read();
+                    let result = current_cache_metadata
+                        .total_size_in_bytes
+                        .saturating_sub(current_cache_metadata.eviction_trigger_size_in_bytes)
+                        > 0;
+                    result
+                };
+
+                // If we don't need to evict, sleep for 100 ms.
+                if !should_evict {
+                    tokio::time::sleep(Duration::from_millis(IN_MEMORY_CACHE_GC_INTERVAL_MS)).await;
+                    continue;
+                }
+
+                // Evict items from the cache.
+                let mut current_cache_metadata = cache_metadata.write();
+                let mut actual_bytes_removed = 0;
+                let mut bytes_to_remove = current_cache_metadata
+                    .total_size_in_bytes
+                    .saturating_sub(current_cache_metadata.target_size_in_bytes);
+                while bytes_to_remove > 0 {
+                    if let Some(key_to_remove) = current_cache_metadata.first_key.clone() {
+                        let (_k, v) = items
+                            .remove(&key_to_remove)
+                            .expect("Failed to remove the key");
+                        let size_of_v = std::mem::size_of_val(&v) as u64;
+                        bytes_to_remove = bytes_to_remove.saturating_sub(size_of_v);
+                        actual_bytes_removed += size_of_v;
+                        current_cache_metadata.first_key = Some(key_to_remove.next(&v));
+                    } else {
+                        break;
+                    }
+                }
+
+                current_cache_metadata.total_size_in_bytes -= actual_bytes_removed;
             }
-            drop(cache_metadata);
-            let weight = self.pop();
-            garbage_collection_count += 1;
-            garbage_collection_size += weight;
-        }
-        (garbage_collection_count, garbage_collection_size)
-    }
-
-    fn insert_impl(&self, key: K, value: V) {
-        let mut cache_metadata = self.cache_metadata.write();
-        cache_metadata.last_key = Some(key.clone());
-        cache_metadata.total_size_in_bytes += std::mem::size_of_val(&value) as u64;
-        self.items.insert(key, value);
+        });
     }
 }
 
@@ -87,19 +124,17 @@ where
         self.items.get(key).map(|v| v.value().clone())
     }
 
-    fn insert(&self, key: K, value: V) -> (u64, u64) {
+    fn insert(&self, key: K, value: V) {
         // If cache is empty, set the first to the new key.
         if self.items.is_empty() {
             let mut cache_metadata = self.cache_metadata.write();
             cache_metadata.first_key = Some(key.clone());
         }
 
-        // Evict until enough space is available for next value.
-        let (garbage_collection_count, garbage_collection_size) =
-            self.evict(std::mem::size_of_val(&value) as u64);
-        self.insert_impl(key, value);
-
-        return (garbage_collection_count, garbage_collection_size);
+        let mut cache_metadata = self.cache_metadata.write();
+        cache_metadata.last_key = Some(key.clone());
+        cache_metadata.total_size_in_bytes += std::mem::size_of_val(&value) as u64;
+        self.items.insert(key, value);
     }
 
     fn total_size(&self) -> u64 {

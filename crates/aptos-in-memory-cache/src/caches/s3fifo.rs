@@ -17,9 +17,8 @@ where
         S3FIFOCache::get(self, key)
     }
 
-    fn insert(&self, key: K, value: V) -> (u64, u64) {
+    fn insert(&self, key: K, value: V) {
         S3FIFOCache::insert(self, key, value);
-        (0, 0)
     }
 
     fn total_size(&self) -> u64 {
