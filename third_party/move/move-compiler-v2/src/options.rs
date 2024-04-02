@@ -134,6 +134,13 @@ impl Options {
         }
     }
 
+    pub fn set_skip_attribute_checks(self, value: bool) -> Self {
+        Self {
+            skip_attribute_checks: value,
+            ..self
+        }
+    }
+
     pub fn set_compile_test_code(self, value: bool) -> Self {
         Self {
             compile_test_code: value,
