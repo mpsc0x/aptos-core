@@ -71,6 +71,14 @@ static UNIT_PATH_REMAP: Lazy<BTreeMap<String, String>> = Lazy::new(|| {
         "reference-safety/v1-tests".to_string(),
         "borrows".to_string(),
     );
+    map.insert(
+        "reference-safety/v1-borrow-tests".to_string(),
+        "borrow_tests".to_string(),
+    );
+    map.insert(
+        "reference-safety/v1-locals".to_string(),
+        "locals".to_string(),
+    );
     map.insert("friends/v1-tests".to_string(), "naming".to_string());
     map.insert(
         "uninit-use-checker/v1-commands".to_string(),
@@ -110,11 +118,17 @@ static UNIT_PATH_REMAP: Lazy<BTreeMap<String, String>> = Lazy::new(|| {
         "cyclic-instantiation-checker/v1-tests".to_string(),
         "instantiation_loops".to_string(),
     );
+    map.insert(
+        "cyclic-instantiation-checker/v1-typing".to_string(),
+        "typing".to_string(),
+    );
     map.insert("abilities/v1".to_string(), "typing".to_string());
     map.insert(
         "acquires-checker/v1-tests".to_string(),
         "typing".to_string(),
     );
+    map.insert("ability-check/v1-typing".to_string(), "typing".to_string());
+    map.insert("ability-check/v1-signer".to_string(), "signer".to_string());
     map
 });
 
