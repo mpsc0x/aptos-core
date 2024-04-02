@@ -13,7 +13,7 @@ pub const FILE_ENTRY_TRANSACTION_COUNT: u64 = 1000;
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, Eq, PartialEq)]
 pub enum StorageFormat {
-    GzipCompressedProto,
+    Lz4CompressedProto,
     // Only used for legacy file format.
     // Use by cache only.
     Base64UncompressedProto,
@@ -74,7 +74,7 @@ pub enum CacheEntry {
 impl CacheEntry {
     pub fn new(bytes: Vec<u8>, storage_format: StorageFormat) -> Self {
         match storage_format {
-            StorageFormat::GzipCompressedProto => Self::GzipCompressionProto(bytes),
+            StorageFormat::Lz4CompressedProto => Self::GzipCompressionProto(bytes),
             // Legacy format.
             StorageFormat::Base64UncompressedProto => Self::Base64UncompressedProto(bytes),
             StorageFormat::JsonBase64UncompressedProto => {
@@ -103,7 +103,7 @@ impl CacheEntry {
             .encode(&mut bytes)
             .expect("proto serialization failed.");
         match storage_format {
-            StorageFormat::GzipCompressedProto => {
+            StorageFormat::Lz4CompressedProto => {
                 let mut compressed = GzEncoder::new(bytes.as_slice(), flate2::Compression::fast());
                 let mut result = Vec::new();
                 compressed
@@ -124,7 +124,7 @@ impl CacheEntry {
 
     pub fn build_key(version: u64, storage_format: StorageFormat) -> String {
         match storage_format {
-            StorageFormat::GzipCompressedProto => {
+            StorageFormat::Lz4CompressedProto => {
                 format!("gz:{}", version)
             },
             StorageFormat::Base64UncompressedProto => {
@@ -164,7 +164,7 @@ pub enum FileEntry {
 impl FileEntry {
     pub fn new(bytes: Vec<u8>, storage_format: StorageFormat) -> Self {
         match storage_format {
-            StorageFormat::GzipCompressedProto => Self::GzipCompressionProto(bytes),
+            StorageFormat::Lz4CompressedProto => Self::GzipCompressionProto(bytes),
             StorageFormat::Base64UncompressedProto => {
                 panic!("Base64UncompressedProto is not supported.")
             },
@@ -203,7 +203,7 @@ impl FileEntry {
             panic!("Starting version has to be a multiple of FILE_ENTRY_TRANSACTION_COUNT.")
         }
         match storage_format {
-            StorageFormat::GzipCompressedProto => {
+            StorageFormat::Lz4CompressedProto => {
                 let t = TransactionsInStorage {
                     starting_version: Some(transactions.first().unwrap().version),
                     transactions,
@@ -247,7 +247,7 @@ impl FileEntry {
         hasher.update(starting_version.to_string());
         let file_prefix = format!("{:x}", hasher.finalize());
         match storage_format {
-            StorageFormat::GzipCompressedProto => {
+            StorageFormat::Lz4CompressedProto => {
                 format!(
                     "compressed_files/gzip/{}_{}.bin",
                     file_prefix, starting_version
@@ -326,7 +326,7 @@ mod tests {
         let transaction_clone = transaction.clone();
         let proto_size = transaction.encoded_len();
         let cache_entry =
-            CacheEntry::from_transaction(transaction, StorageFormat::GzipCompressedProto);
+            CacheEntry::from_transaction(transaction, StorageFormat::Lz4CompressedProto);
         let compressed_size = cache_entry.size();
         assert!(compressed_size != proto_size);
         let deserialized_transaction = cache_entry.into_transaction();
@@ -393,7 +393,7 @@ mod tests {
         };
         let transactions_in_storage_size = transactions_in_storage.encoded_len();
         let file_entry =
-            FileEntry::from_transactions(transactions.clone(), StorageFormat::GzipCompressedProto);
+            FileEntry::from_transactions(transactions.clone(), StorageFormat::Lz4CompressedProto);
         assert_ne!(file_entry.size(), transactions_in_storage_size);
         let deserialized_transactions = file_entry.into_transactions_in_storage();
         for (i, transaction) in transactions.iter().enumerate() {
@@ -404,7 +404,7 @@ mod tests {
     #[test]
     fn test_cache_entry_key_to_string_gzip_compressed_proto() {
         assert_eq!(
-            CacheEntry::build_key(42, StorageFormat::GzipCompressedProto),
+            CacheEntry::build_key(42, StorageFormat::Lz4CompressedProto),
             "gz:42"
         );
     }
@@ -426,7 +426,7 @@ mod tests {
     #[test]
     fn test_file_entry_key_to_string_gzip_compressed_proto() {
         assert_eq!(
-            FileEntry::build_key(42, StorageFormat::GzipCompressedProto),
+            FileEntry::build_key(42, StorageFormat::Lz4CompressedProto),
             "compressed_files/gzip/3d1bff1ba654ca5fdb6ac1370533d876_0.bin"
         );
     }
@@ -478,7 +478,7 @@ mod tests {
 
         assert_eq!(
             file_metadata.storage_format,
-            StorageFormat::GzipCompressedProto
+            StorageFormat::Lz4CompressedProto
         );
         assert_eq!(file_metadata.chain_id, 1);
         assert_eq!(file_metadata.file_folder_size, 1000);
