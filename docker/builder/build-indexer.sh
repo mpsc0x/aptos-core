@@ -16,6 +16,8 @@ cargo build --locked --profile=$PROFILE \
     -p aptos-indexer-grpc-file-store \
     -p aptos-indexer-grpc-data-service \
     -p aptos-nft-metadata-crawler-parser \
+    # InMemory benchmark is small, ~2mb.
+    -p aptos-indexer-grpc-in-memory-cache-benchmark \
     "$@"
 
 # After building, copy the binaries we need to `dist` since the `target` directory is used as docker cache mount and only available during the RUN step
@@ -24,6 +26,7 @@ BINS=(
     aptos-indexer-grpc-file-store
     aptos-indexer-grpc-data-service
     aptos-nft-metadata-crawler-parser
+    aptos-indexer-grpc-in-memory-cache-benchmark
 )
 
 mkdir dist

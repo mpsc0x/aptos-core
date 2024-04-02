@@ -15,7 +15,7 @@ use aptos_indexer_grpc_utils::{
 use aptos_protos::transaction::v1::{Transaction, TransactionInfo};
 use lazy_static::lazy_static;
 use once_cell::sync::OnceCell;
-use redis_test::{MockCmd, *};
+use redis_test::{MockCmd, MockRedisConnection};
 use std::sync::Arc;
 
 #[cfg(unix)]
