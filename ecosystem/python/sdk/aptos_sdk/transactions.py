@@ -24,7 +24,7 @@ from .authenticator import (
     SingleKeyAuthenticator,
     SingleSenderAuthenticator,
 )
-from .bcs import Deserializer, Serializer
+from .bcs import Deserializable, Deserializer, Serializable, Serializer
 from .type_tag import StructTag, TypeTag
 
 
@@ -78,7 +78,7 @@ class RawTransactionWithData(RawTransactionInternal, Protocol):
         return hasher.digest()
 
 
-class RawTransaction(RawTransactionInternal):
+class RawTransaction(Deserializable, RawTransactionInternal, Serializable):
     # Sender's address
     sender: AccountAddress
     # Sequence number of this transaction. This must match the sequence number in the sender's

@@ -2,7 +2,7 @@
 
 All notable changes to the Aptos Python SDK will be captured in this file. This changelog is written by hand for now.
 
-## 0.8.5
+## 0.8.6
 - add client for graphql indexer service with light demo in coin transfer
 - add mypy to ignore missing types for graphql and ecdsa
 - remove `<4.0` requirement for python as this invariant blocks updates unnecessarily, for example, httpx was several versions behind
@@ -10,6 +10,7 @@ All notable changes to the Aptos Python SDK will be captured in this file. This 
 - add py.typed so that projects can add type checking when using the sdk
 - fix tables api -- there was an extra `base_url`
 - ClientConfig updates for bearer token
+- Identified a TypeTag parsing issue where nested types weren't wrapped with TypeTag
 
 ## 0.8.1
 - Improve TypeTag parsing for nested types
