@@ -1,11 +1,14 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::file_format_generator::{
-    function_generator::FunctionGenerator, MAX_ADDRESS_COUNT, MAX_CONST_COUNT, MAX_FIELD_COUNT,
-    MAX_FIELD_INST_COUNT, MAX_FUNCTION_COUNT, MAX_FUNCTION_INST_COUNT, MAX_IDENTIFIER_COUNT,
-    MAX_MODULE_COUNT, MAX_SIGNATURE_COUNT, MAX_STRUCT_COUNT, MAX_STRUCT_DEF_COUNT,
-    MAX_STRUCT_DEF_INST_COUNT,
+use crate::{
+    file_format_generator::{
+        function_generator::FunctionGenerator, MAX_ADDRESS_COUNT, MAX_CONST_COUNT, MAX_FIELD_COUNT,
+        MAX_FIELD_INST_COUNT, MAX_FUNCTION_COUNT, MAX_FUNCTION_INST_COUNT, MAX_IDENTIFIER_COUNT,
+        MAX_MODULE_COUNT, MAX_SIGNATURE_COUNT, MAX_STRUCT_COUNT, MAX_STRUCT_DEF_COUNT,
+        MAX_STRUCT_DEF_INST_COUNT,
+    },
+    Options,
 };
 use codespan_reporting::diagnostic::Severity;
 use move_binary_format::{
@@ -145,14 +148,24 @@ impl ModuleGenerator {
             self.module_index(ctx, loc, module_env);
         }
 
+        let options = ctx
+            .env
+            .get_extension::<Options>()
+            .expect("Options is available");
+        let compile_test_code = options.compile_test_code;
+
         for struct_env in module_env.get_structs() {
-            self.gen_struct(ctx, &struct_env)
+            if compile_test_code || !struct_env.is_test_only() {
+                self.gen_struct(ctx, &struct_env)
+            }
         }
 
         let acquires_map = ctx.generate_acquires_map(module_env);
         for fun_env in module_env.get_functions() {
-            let acquires_list = &acquires_map[&fun_env.get_id()];
-            FunctionGenerator::run(self, ctx, fun_env, acquires_list);
+            if compile_test_code || !fun_env.is_test_only() {
+                let acquires_list = &acquires_map[&fun_env.get_id()];
+                FunctionGenerator::run(self, ctx, fun_env, acquires_list);
+            }
         }
 
         // At handles of friend modules
