@@ -49,11 +49,20 @@ impl NetworkTest for FrameworkUpgrade {
         info!("{}", msg);
         ctx.report.report_text(msg);
 
-        // Update the validators to latest version.
+        // Update half the validators to latest version.
+        let first_half = &all_validators[..all_validators.len() / 2];
         let msg = format!("Upgrade the nodes to version: {}", new_version);
         info!("{}", msg);
         ctx.report.report_text(msg);
-        runtime.block_on(batch_update(ctx, &all_validators, &new_version))?;
+        runtime.block_on(batch_update(ctx, first_half, &new_version))?;
+
+        // Generate some traffic
+        let duration = Duration::from_secs(30);
+        let txn_stat = generate_traffic(ctx, &all_validators, duration)?;
+        ctx.report.report_txn_stats(
+            format!("{}::full-framework-upgrade", self.name()),
+            &txn_stat,
+        );
 
         ctx.swarm().fork_check()?;
 
@@ -135,6 +144,22 @@ impl NetworkTest for FrameworkUpgrade {
             "Compatibility test for {} ==> {} passed",
             old_version, new_version
         ));
+
+        // Upgrade the rest
+        let second_half = &all_validators[all_validators.len() / 2..];
+        let msg = format!("Upgrade the remaining nodes to version: {}", new_version);
+        info!("{}", msg);
+        ctx.report.report_text(msg);
+        runtime.block_on(batch_update(ctx, second_half, &new_version))?;
+
+        let duration = Duration::from_secs(30);
+        let txn_stat = generate_traffic(ctx, &all_validators, duration)?;
+        ctx.report.report_txn_stats(
+            format!("{}::full-framework-upgrade", self.name()),
+            &txn_stat,
+        );
+
+        ctx.swarm().fork_check()?;
 
         Ok(())
     }
