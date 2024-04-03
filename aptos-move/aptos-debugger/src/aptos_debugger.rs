@@ -299,34 +299,6 @@ impl AptosDebugger {
     pub fn state_view_at_version(&self, version: Version) -> DebuggerStateView {
         DebuggerStateView::new(self.debugger.clone(), version)
     }
-
-    pub fn run_session_at_version<F>(&self, version: Version, f: F) -> Result<VMChangeSet>
-    where
-        F: FnOnce(&mut SessionExt) -> VMResult<()>,
-    {
-        let state_view = DebuggerStateView::new(self.debugger.clone(), version);
-        let state_view_storage = state_view.as_move_resolver();
-        let features = Features::fetch_config(&state_view_storage).unwrap_or_default();
-        let move_vm = MoveVmExt::new(
-            NativeGasParameters::zeros(),
-            MiscGasParameters::zeros(),
-            LATEST_GAS_FEATURE_VERSION,
-            ChainId::test().id(),
-            features,
-            TimedFeaturesBuilder::enable_all().build(),
-            &state_view_storage,
-            /*aggregator_v2_type_tagging*/ false,
-        )
-        .unwrap();
-        let mut session = move_vm.new_session(&state_view_storage, SessionId::Void, None);
-        f(&mut session).map_err(|err| format_err!("Unexpected VM Error: {:?}", err))?;
-        let change_set = session
-            .finish(&ChangeSetConfigs::unlimited_at_gas_feature_version(
-                LATEST_GAS_FEATURE_VERSION,
-            ))
-            .map_err(|err| format_err!("Unexpected VM Error: {:?}", err))?;
-        Ok(change_set)
-    }
 }
 
 fn is_reconfiguration(vm_output: &TransactionOutput) -> bool {
