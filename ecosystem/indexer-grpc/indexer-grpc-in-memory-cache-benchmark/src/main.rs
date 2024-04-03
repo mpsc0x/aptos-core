@@ -123,9 +123,12 @@ fn spawn_cache_consumption_task(
     })
 }
 
-async fn test_small_transactions() {
-    let transaction_size = 2 * 1024;
-    let task_count = 10;
+async fn run_transaction_test(
+    transaction_size: u64,
+    task_count: u64,
+    duration_in_secs: u64,
+    expected_tps: f64,
+) {
     let redis_connection = create_mock_redis(transaction_size);
     let cache = Arc::new(
         InMemoryCache::new_with_redis_connection(
@@ -136,7 +139,7 @@ async fn test_small_transactions() {
         .unwrap(),
     );
     let tasks = (0..task_count)
-        .map(|_| spawn_cache_consumption_task(cache.clone(), 20))
+        .map(|_| spawn_cache_consumption_task(cache.clone(), duration_in_secs))
         .collect::<Vec<_>>();
     // join all the tasks.
     let tps = futures::future::join_all(tasks)
@@ -146,65 +149,13 @@ async fn test_small_transactions() {
         .sum::<f64>()
         / task_count as f64;
     println!("TPS: {}", tps);
-    assert!(tps > 20_000.0);
-}
-
-async fn test_small_transactions_with_contention() {
-    let transaction_size = 2 * 1024;
-    let task_count = 1000;
-    let redis_connection = create_mock_redis(transaction_size);
-    let cache = Arc::new(
-        InMemoryCache::new_with_redis_connection(
-            redis_connection,
-            StorageFormat::Lz4CompressedProto,
-        )
-        .await
-        .unwrap(),
-    );
-    let tasks = (0..task_count)
-        .map(|_| spawn_cache_consumption_task(cache.clone(), 20))
-        .collect::<Vec<_>>();
-    // join all the tasks.
-    let tps = futures::future::join_all(tasks)
-        .await
-        .iter()
-        .map(|r| r.as_ref().unwrap())
-        .sum::<f64>()
-        / task_count as f64;
-    println!("TPS: {}", tps);
-    assert!(tps > 100.0);
-}
-
-async fn test_large_transactions() {
-    let transaction_size = 1024 * 1024;
-    let task_count = 20;
-    let redis_connection = create_mock_redis(transaction_size);
-    let cache = Arc::new(
-        InMemoryCache::new_with_redis_connection(
-            redis_connection,
-            StorageFormat::Lz4CompressedProto,
-        )
-        .await
-        .unwrap(),
-    );
-    let tasks = (0..task_count)
-        .map(|_| spawn_cache_consumption_task(cache.clone(), 5))
-        .collect::<Vec<_>>();
-    // join all the tasks.
-    let tps = futures::future::join_all(tasks)
-        .await
-        .iter()
-        .map(|r| r.as_ref().unwrap())
-        .sum::<f64>()
-        / task_count as f64;
-    println!("TPS: {}", tps);
-    assert!(tps > 500.0);
+    assert!(tps > expected_tps);
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 16)]
 async fn main() -> anyhow::Result<()> {
-    test_small_transactions().await;
-    test_small_transactions_with_contention().await;
-    test_large_transactions().await;
+    run_transaction_test(2 * 1024, 10, 20, 20_000.0).await;
+    run_transaction_test(2 * 1024, 1000, 20, 100.0).await;
+    run_transaction_test(1024 * 1024, 20, 5, 500.0).await;
     Ok(())
 }
