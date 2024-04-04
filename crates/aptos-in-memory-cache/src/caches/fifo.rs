@@ -76,11 +76,10 @@ where
                 // Check if we should evict items from the cache.
                 let should_evict = {
                     let current_cache_metadata = cache_metadata.read();
-                    let result = current_cache_metadata
+                    current_cache_metadata
                         .total_size_in_bytes
                         .saturating_sub(current_cache_metadata.eviction_trigger_size_in_bytes)
-                        > 0;
-                    result
+                        > 0
                 };
 
                 // If we don't need to evict, sleep for 100 ms.
