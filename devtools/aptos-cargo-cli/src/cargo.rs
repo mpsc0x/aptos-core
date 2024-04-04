@@ -7,6 +7,7 @@ use std::{
     process::{Command, Stdio},
 };
 
+#[derive(Debug)]
 pub struct Cargo {
     inner: Command,
     pass_through_args: Vec<OsString>,

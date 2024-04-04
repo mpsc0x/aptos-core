@@ -7,7 +7,6 @@ mod common;
 use cargo::Cargo;
 use clap::{Args, Parser, Subcommand};
 pub use common::SelectedPackageArgs;
-use log::trace;
 
 #[derive(Args, Clone, Debug)]
 #[command(disable_help_flag = true)]
@@ -78,12 +77,12 @@ impl AptosCargoCommand {
     pub fn execute(&self, package_args: &SelectedPackageArgs) -> anyhow::Result<()> {
         let (mut direct_args, mut push_through_args) = self.split_args();
 
-        trace!("parsed direct_args: {:?}", direct_args);
-        trace!("parsed push_through_args: {:?}", push_through_args);
+        println!("parsed direct_args: {:?}", direct_args);
+        println!("parsed push_through_args: {:?}", push_through_args);
 
         let packages = package_args.compute_packages()?;
 
-        trace!("affected packages: {:?}", packages);
+        println!("affected packages: {:?}", packages);
 
         for p in packages {
             direct_args.push("-p".into());
@@ -96,13 +95,17 @@ impl AptosCargoCommand {
             }
         }
 
-        trace!("final direct_args: {:?}", direct_args);
-        trace!("final push_through_args: {:?}", push_through_args);
+        println!("final direct_args: {:?}", direct_args);
+        println!("final push_through_args: {:?}", push_through_args);
 
-        Cargo::command(self.command())
-            .args(direct_args)
-            .pass_through(push_through_args)
-            .run();
+        // Construct the final command
+        let mut command = Cargo::command(self.command());
+        command.args(direct_args).pass_through(push_through_args);
+        println!("Running command: {:?}", command);
+
+        // Run the command
+        command.run();
+
         Ok(())
     }
 }
