@@ -23,7 +23,8 @@ use crate::{
         chunked_publish::{
             create_chunked_publish_payloads_from_built_package,
             create_package_publication_data_from_built_package,
-            submit_chunked_publish_transactions, ChunkedPackagePublishMode, PackagePublishMode,
+            large_packages_cleanup_staging_area, submit_chunked_publish_transactions,
+            ChunkedPackagePublishMode, PackagePublishMode, LARGE_PACKAGES_MODULE_ADDRESS,
         },
         coverage::SummaryCoverage,
         manifest::{Dependency, ManifestNamedAddress, MovePackageManifest, PackageInfo},
@@ -96,6 +97,7 @@ const HELLO_BLOCKCHAIN_EXAMPLE: &str = include_str!(
 pub enum MoveTool {
     BuildPublishPayload(BuildPublishPayload),
     Clean(CleanPackage),
+    ClearStagingArea(ClearStagingArea),
     #[clap(alias = "build")]
     Compile(CompilePackage),
     #[clap(alias = "build-script")]
@@ -130,6 +132,7 @@ impl MoveTool {
         match self {
             MoveTool::BuildPublishPayload(tool) => tool.execute_serialized().await,
             MoveTool::Clean(tool) => tool.execute_serialized().await,
+            MoveTool::ClearStagingArea(tool) => tool.execute_serialized().await,
             MoveTool::Compile(tool) => tool.execute_serialized().await,
             MoveTool::CompileScript(tool) => tool.execute_serialized().await,
             MoveTool::Coverage(tool) => tool.execute().await,
@@ -1127,6 +1130,7 @@ impl CliCommand<TransactionSummary> for CreateObjectAndPublishPackage {
     }
 }
 
+/// Upgrades the modules in a Move package deployed under an object.
 #[derive(Parser)]
 pub struct UpgradeObjectPackage {
     /// Address of the object the package was deployed to
@@ -1234,6 +1238,33 @@ impl CliCommand<TransactionSummary> for UpgradeObjectPackage {
             );
         }
         result
+    }
+}
+
+/// Cleans up the `StagingArea` resource under an account, which is used for chunked publish mode.
+#[derive(Parser)]
+pub struct ClearStagingArea {
+    #[clap(flatten)]
+    pub(crate) txn_options: TransactionOptions,
+}
+
+#[async_trait]
+impl CliCommand<TransactionSummary> for ClearStagingArea {
+    fn command_name(&self) -> &'static str {
+        "ClearStagingArea"
+    }
+
+    async fn execute(self) -> CliTypedResult<TransactionSummary> {
+        println!(
+            "Cleaning up resource {}::large_packages::StagingArea under account {}.",
+            LARGE_PACKAGES_MODULE_ADDRESS,
+            self.txn_options.profile_options.account_address()?
+        );
+        let payload = large_packages_cleanup_staging_area();
+        self.txn_options
+            .submit_transaction(payload)
+            .await
+            .map(TransactionSummary::from)
     }
 }
 
