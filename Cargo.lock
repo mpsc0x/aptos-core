@@ -7192,7 +7192,6 @@ name = "e2e-move-tests"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "aptos",
  "aptos-cached-packages",
  "aptos-crypto",
  "aptos-framework",
