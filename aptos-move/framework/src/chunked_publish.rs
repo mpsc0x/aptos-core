@@ -5,7 +5,7 @@ use aptos_types::transaction::{EntryFunction, TransactionPayload};
 use move_core_types::{account_address::AccountAddress, ident_str, language_storage::ModuleId};
 
 pub const LARGE_PACKAGES_MODULE_ADDRESS: &str =
-    "0xa29df848eebfe5d981f708c2a5b06d31af2be53bbd8ddc94c8523f4b903f7adb"; // mainnet and testnet
+    "0x7ec90154fa3c01e400effb2c4f73223b8cbe3af63a087cceca7a381c8818c4ea"; // mainnet and testnet
 
 /// Maximum code & metadata chunk size to be included in a transaction
 pub const MAX_CHUNK_SIZE_IN_BYTES: usize = 60_000;
