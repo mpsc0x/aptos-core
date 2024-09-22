@@ -764,23 +764,6 @@ pub struct BuildPublishPayload {
     pub(crate) json_output_file: PathBuf,
 }
 
-fn get_build_options(
-    included_artifacts_args: &IncludedArtifactsArgs,
-    move_options: &MovePackageDir,
-) -> BuildOptions {
-    included_artifacts_args.included_artifacts.build_options(
-        move_options.dev,
-        move_options.skip_fetch_latest_git_deps,
-        move_options.named_addresses(),
-        move_options.override_std.clone(),
-        move_options.bytecode_version,
-        move_options.compiler_version,
-        move_options.language_version,
-        move_options.skip_attribute_checks,
-        move_options.check_test_code,
-    )
-}
-
 impl TryInto<PackagePublicationData> for &PublishPackage {
     type Error = CliError;
 
@@ -1041,6 +1024,7 @@ impl CliCommand<TransactionSummary> for PublishPackage {
     async fn execute(self) -> CliTypedResult<TransactionSummary> {
         if self.chunked_publish_option.chunked_publish {
             let chunked_package_payloads: ChunkedPublishPayloads = (&self).async_try_into().await?;
+
             let message = format!("Publishing package in chunked mode will submit {} transactions for staging and publishing code.\n", &chunked_package_payloads.payloads.len());
             println!("{}", message.bold());
             submit_chunked_publish_transactions(
@@ -1320,126 +1304,6 @@ impl CliCommand<TransactionSummary> for UpgradeObjectPackage {
             );
         }
         result
-    }
-}
-
-async fn submit_chunked_publish_transactions(
-    payloads: Vec<TransactionPayload>,
-    txn_options: &TransactionOptions,
-) -> CliTypedResult<TransactionSummary> {
-    let mut publishing_result = Err(CliError::UnexpectedError(
-        "No payload provided for batch transaction run".to_string(),
-    ));
-    let payloads_length = payloads.len() as u64;
-    let mut tx_hashes = vec![];
-
-    let account_address = txn_options.profile_options.account_address()?;
-
-    if !is_staging_area_empty(txn_options).await? {
-        let message = format!(
-            "The resource {}::large_packages::StagingArea under account {} is not empty.\
-        \nThis may cause package publishing to fail if the data is unexpected. \
-        \nUse the `aptos move clear-staging-area` command to clean up the `StagingArea` resource under the account.",
-            LARGE_PACKAGES_MODULE_ADDRESS, account_address,
-        )
-            .bold();
-        println!("{}", message);
-        prompt_yes_with_override("Do you want to proceed?", txn_options.prompt_options)?;
-    }
-
-    for (idx, payload) in payloads.into_iter().enumerate() {
-        println!("Transaction {} of {}", idx + 1, payloads_length);
-        let result = txn_options
-            .submit_transaction(payload)
-            .await
-            .map(TransactionSummary::from);
-
-        match result {
-            Ok(tx_summary) => {
-                let tx_hash = tx_summary.transaction_hash.to_string();
-                println!("Submitted Successfully ({})\n", &tx_hash);
-                tx_hashes.push(tx_hash);
-                publishing_result = Ok(tx_summary);
-            },
-
-            Err(e) => {
-                println!("Caution: An error occurred while submitting chunked publish transactions. \
-                \nDue to this error, there may be incomplete data left in the `StagingArea` resource. \
-                \nThis could cause further errors if you attempt to run the chunked publish command again. \
-                \nTo avoid this, use the `aptos move clear-staging-area` command to clean up the `StagingArea` resource under your account before retrying.");
-                return Err(e);
-            },
-        }
-    }
-
-    println!(
-        "{}",
-        "All Transactions Submitted Successfully.".bold().green()
-    );
-    let tx_hash_formatted = format!(
-        "Submitted Transactions:\n[\n    {}\n]",
-        tx_hashes
-            .iter()
-            .map(|tx| format!("\"{}\"", tx))
-            .collect::<Vec<_>>()
-            .join(",\n    ")
-    );
-    println!("\n{}\n", tx_hash_formatted);
-    publishing_result
-}
-
-async fn is_staging_area_empty(txn_options: &TransactionOptions) -> CliTypedResult<bool> {
-    let url = txn_options.rest_options.url(&txn_options.profile_options)?;
-    let client = Client::new(url);
-
-    let staging_area_response = client
-        .get_account_resource(
-            txn_options.profile_options.account_address()?,
-            &format!(
-                "{}::large_packages::StagingArea",
-                LARGE_PACKAGES_MODULE_ADDRESS
-            ),
-        )
-        .await;
-
-    match staging_area_response {
-        Ok(response) => match response.into_inner() {
-            Some(_) => Ok(false), // StagingArea is not empty
-            None => Ok(true),     // TODO: determine which case this is
-        },
-        Err(RestError::Api(aptos_error_response))
-            if aptos_error_response.error.error_code == AptosErrorCode::ResourceNotFound =>
-        {
-            Ok(true) // The resource doesn't exist
-        },
-        Err(rest_err) => Err(CliError::from(rest_err)),
-    }
-}
-
-/// Cleans up the `StagingArea` resource under an account, which is used for chunked publish mode.
-#[derive(Parser)]
-pub struct ClearStagingArea {
-    #[clap(flatten)]
-    pub(crate) txn_options: TransactionOptions,
-}
-
-#[async_trait]
-impl CliCommand<TransactionSummary> for ClearStagingArea {
-    fn command_name(&self) -> &'static str {
-        "ClearStagingArea"
-    }
-
-    async fn execute(self) -> CliTypedResult<TransactionSummary> {
-        println!(
-            "Cleaning up resource {}::large_packages::StagingArea under account {}.",
-            LARGE_PACKAGES_MODULE_ADDRESS,
-            self.txn_options.profile_options.account_address()?
-        );
-        let payload = large_packages_cleanup_staging_area();
-        self.txn_options
-            .submit_transaction(payload)
-            .await
-            .map(TransactionSummary::from)
     }
 }
 
